@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#c2410c"/>
+  <rect x="112" y="128" width="288" height="272" rx="40" fill="#ffffff"/>
+  <rect x="112" y="128" width="288" height="72" rx="40" fill="#1e293b"/>
+  <rect x="112" y="164" width="288" height="36" fill="#1e293b"/>
+  <rect x="176" y="96" width="28" height="72" rx="14" fill="#1e293b"/>
+  <rect x="308" y="96" width="28" height="72" rx="14" fill="#1e293b"/>
+  <text x="256" y="350" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="132" fill="#1e293b">D</text>
+</svg>

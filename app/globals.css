@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f3f4f6;
+  --card: #ffffff;
+  --ink: #111827;
+  --muted: #4b5563;
+  --line: #e5e7eb;
+  --seg: #e5e7eb;
+  --seg-on: #ffffff;
+  --accent-text: #c2410c;
+  --accent-soft: #ffedd5;
+  --accent-soft-ink: #9a3412;
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0b0f17;
+  --card: #151b26;
+  --ink: #f3f4f6;
+  --muted: #9ca3af;
+  --line: #263042;
+  --seg: #1c2431;
+  --seg-on: #2a3445;
+  --accent-text: #fb923c;
+  --accent-soft: #3b1d0e;
+  --accent-soft-ink: #fdba74;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-seg: var(--seg);
+  --color-seg-on: var(--seg-on);
+  --color-accent: #c2410c;
+  --color-accent-hover: #9a3412;
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-ink: var(--accent-soft-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #c2410c;
+}
+
+/* Native date pickers follow the theme. */
+input[type="date"],
+input[type="datetime-local"] {
+  min-height: 44px;
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+}
