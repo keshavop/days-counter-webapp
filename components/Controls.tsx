@@ -56,7 +56,7 @@ export function UnitChips({ value, onChange }: { value: Unit[]; onChange: (v: Un
               onChange(next.length ? next : [u]);
             }}
             className={`h-10 rounded-full border px-4 text-sm font-semibold capitalize transition ${
-              on ? "border-accent bg-accent text-white" : "border-line bg-card text-ink hover:bg-seg"
+              on ? "border-accent bg-accent text-on-accent" : "border-line bg-card text-ink hover:bg-seg"
             }`}
           >
             {u}
@@ -95,7 +95,7 @@ export const inputClass =
   "h-12 w-full rounded-xl border border-line bg-bg px-3.5 text-[15px] text-ink placeholder:text-muted/80 outline-none focus:border-accent focus:ring-2 focus:ring-accent/25";
 
 export const buttonClass = {
-  primary: "inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-accent px-5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60",
+  primary: "inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-accent px-5 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60",
   secondary:
     "inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-card px-5 font-semibold text-ink hover:bg-seg disabled:opacity-60",
   danger:

@@ -1,23 +1,31 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { DayEvent, Settings, SyncStatus } from "./types";
-import { listEvents, pushEvents, replaceAll } from "./sheets";
+import type { DayEvent, Settings, SyncStatus, User } from "./types";
+import { AuthError, listEvents, logout as apiLogout, me, pushEvents, replaceAll } from "./api";
 import { checkReminders } from "./reminders";
 
-const KEYS = {
-  events: "dc.events",
-  pending: "dc.pending",
-  settings: "dc.settings",
-  lastSync: "dc.lastSync",
-} as const;
+const SETTINGS_KEY = "dc.settings";
+const USER_KEY = "dc.user";
+/** Each account's data is kept apart, so a shared device never mixes them. */
+const keys = (userId: string) =>
+  ({
+    events: `dc.${userId}.events`,
+    pending: `dc.${userId}.pending`,
+    lastSync: `dc.${userId}.lastSync`,
+  }) as const;
+
+const AUTH_PAGES = ["/login", "/signup"];
+
+function toLogin() {
+  if (AUTH_PAGES.includes(location.pathname)) return;
+  const next = location.pathname + location.search;
+  location.replace(next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`);
+}
 
 const DEFAULT_SETTINGS: Settings = {
-  scriptUrl: process.env.NEXT_PUBLIC_APPS_SCRIPT_URL ?? "",
-  apiKey: "",
-  sheetUrl: "",
   autoSync: true,
-  theme: "system",
+  theme: "dark",
 };
 
 function load<T>(key: string, fallback: T): T {
@@ -37,6 +45,14 @@ function save(key: string, value: unknown) {
   }
 }
 
+function remove(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -44,6 +60,8 @@ interface BeforeInstallPromptEvent extends Event {
 
 interface Store {
   ready: boolean;
+  /** The signed-in account, or null on the login and signup pages. */
+  user: User | null;
   /** Live events (no tombstones). */
   events: DayEvent[];
   pendingCount: number;
@@ -59,6 +77,7 @@ interface Store {
   updateSettings: (patch: Partial<Settings>) => void;
   syncNow: () => Promise<void>;
   install: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -71,6 +90,7 @@ export function useStore(): Store {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [all, setAll] = useState<DayEvent[]>([]);
   const [pending, setPending] = useState<Record<string, string>>({}); // id → updated_at that still needs pushing
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -83,24 +103,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const allRef = useRef(all);
   const pendingRef = useRef(pending);
   const settingsRef = useRef(settings);
+  const userRef = useRef(user);
   const syncing = useRef(false);
   allRef.current = all;
   pendingRef.current = pending;
   settingsRef.current = settings;
+  userRef.current = user;
 
   /* ---------- load + persist ---------- */
   useEffect(() => {
-    setAll(load<DayEvent[]>(KEYS.events, []));
-    setPending(load<Record<string, string>>(KEYS.pending, {}));
-    setSettings({ ...DEFAULT_SETTINGS, ...load<Partial<Settings>>(KEYS.settings, {}) });
-    setLastSync(load<string | null>(KEYS.lastSync, null));
-    setReady(true);
+    setSettings({ ...DEFAULT_SETTINGS, ...load<Partial<Settings>>(SETTINGS_KEY, {}) });
+    const adopt = (u: User) => {
+      const k = keys(u.id);
+      setAll(load<DayEvent[]>(k.events, []));
+      setPending(load<Record<string, string>>(k.pending, {}));
+      setLastSync(load<string | null>(k.lastSync, null));
+      setUser(u);
+      setReady(true);
+    };
+    // Start from the remembered account so the app opens instantly (and offline),
+    // then confirm the session with the server.
+    const cached = load<User | null>(USER_KEY, null);
+    if (cached) adopt(cached);
+    me()
+      .then((u) => {
+        save(USER_KEY, u);
+        if (!cached || cached.id !== u.id) adopt(u);
+        else setUser(u);
+      })
+      .catch((err) => {
+        if (err instanceof AuthError) {
+          remove(USER_KEY);
+          setUser(null);
+          setStatus("signedout");
+          setReady(true);
+          toLogin();
+        } else if (!cached) {
+          setReady(true); // offline and never signed in here
+        }
+      });
   }, []);
 
-  useEffect(() => void (ready && save(KEYS.events, all)), [ready, all]);
-  useEffect(() => void (ready && save(KEYS.pending, pending)), [ready, pending]);
-  useEffect(() => void (ready && save(KEYS.settings, settings)), [ready, settings]);
-  useEffect(() => void (ready && save(KEYS.lastSync, lastSync)), [ready, lastSync]);
+  const uid = user?.id;
+  useEffect(() => void (ready && uid && save(keys(uid).events, all)), [ready, uid, all]);
+  useEffect(() => void (ready && uid && save(keys(uid).pending, pending)), [ready, uid, pending]);
+  useEffect(() => void (ready && save(SETTINGS_KEY, settings)), [ready, settings]);
+  useEffect(() => void (ready && uid && save(keys(uid).lastSync, lastSync)), [ready, uid, lastSync]);
 
   /* ---------- theme ---------- */
   useEffect(() => {
@@ -109,7 +157,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const apply = () => {
       const dark = settings.theme === "dark" || (settings.theme === "system" && mq.matches);
       document.documentElement.classList.toggle("dark", dark);
-      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0b0f17" : "#f3f4f6");
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#09090b" : "#fafafa");
     };
     apply();
     mq.addEventListener("change", apply);
@@ -118,9 +166,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /* ---------- sync ---------- */
   const syncNow = useCallback(async () => {
-    const { scriptUrl, apiKey } = settingsRef.current;
-    if (!scriptUrl) {
-      setStatus("unconfigured");
+    if (!userRef.current) {
+      setStatus("signedout");
       return;
     }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -135,7 +182,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const sent = { ...pendingRef.current };
     const changed = allRef.current.filter((e) => sent[e.id] !== undefined);
     try {
-      const remote = changed.length ? await pushEvents(scriptUrl, apiKey, changed) : await listEvents(scriptUrl, apiKey);
+      const remote = changed.length ? await pushEvents(changed) : await listEvents();
       // Anything edited while the request was in flight stays pending and keeps its local copy.
       const still: Record<string, string> = {};
       for (const [id, stamp] of Object.entries(pendingRef.current)) if (sent[id] !== stamp) still[id] = stamp;
@@ -146,6 +193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLastSync(new Date().toISOString());
       setStatus("idle");
     } catch (err) {
+      if (err instanceof AuthError) return toLogin();
       setError(err instanceof Error ? err.message : String(err));
       setStatus(navigator.onLine ? "error" : "offline");
     } finally {
@@ -155,11 +203,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Sync on start, when connectivity returns, and every 5 minutes.
   useEffect(() => {
-    if (!ready) return;
-    if (!settings.scriptUrl) {
-      setStatus("unconfigured");
-      return;
-    }
+    if (!ready || !uid) return;
     void syncNow();
     const onOnline = () => void syncNow();
     const onOffline = () => setStatus("offline");
@@ -173,15 +217,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", onOffline);
       window.clearInterval(timer);
     };
-  }, [ready, settings.scriptUrl, syncNow]);
+  }, [ready, uid, syncNow]);
 
   // Push local changes shortly after they happen.
   const pendingCount = Object.keys(pending).length;
   useEffect(() => {
-    if (!ready || !pendingCount || !settings.autoSync || !settings.scriptUrl) return;
+    if (!ready || !pendingCount || !settings.autoSync || !uid) return;
     const t = window.setTimeout(() => void syncNow(), 1200);
     return () => window.clearTimeout(t);
-  }, [ready, pending, pendingCount, settings.autoSync, settings.scriptUrl, syncNow]);
+  }, [ready, pending, pendingCount, settings.autoSync, uid, syncNow]);
 
   /* ---------- reminders ---------- */
   useEffect(() => {
@@ -239,24 +283,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (incoming: DayEvent[], mode: "merge" | "replace") => {
       const now = new Date().toISOString();
       const stamped = incoming.map((e) => ({ ...e, updated_at: now }));
-      const { scriptUrl, apiKey } = settingsRef.current;
       if (mode === "replace") {
-        if (scriptUrl && navigator.onLine) {
+        if (userRef.current && navigator.onLine) {
           setStatus("syncing");
           try {
-            const remote = await replaceAll(scriptUrl, apiKey, stamped);
+            const remote = await replaceAll(stamped);
             setAll(remote);
             setPending({});
             setLastSync(new Date().toISOString());
             setStatus("idle");
             return;
           } catch (err) {
+            if (err instanceof AuthError) toLogin();
             setError(err instanceof Error ? err.message : String(err));
             setStatus("error");
             throw err;
           }
         }
-        // Offline / not connected: replace locally, delete the rest when we next sync.
+        // Offline: replace locally, delete the rest when we next sync.
         const keep = new Set(stamped.map((e) => e.id));
         const tombs = allRef.current.filter((e) => !keep.has(e.id)).map((e) => ({ ...e, deleted: true, updated_at: now }));
         setAll([...stamped, ...tombs]);
@@ -282,11 +326,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setInstallEvent(null);
   }, [installEvent]);
 
+  const logout = useCallback(async () => {
+    const u = userRef.current;
+    try {
+      await apiLogout();
+    } catch {
+      /* offline: the cookie expires on its own; still forget the account here */
+    }
+    if (u) for (const k of Object.values(keys(u.id))) remove(k);
+    remove(USER_KEY);
+    location.replace("/login");
+  }, []);
+
   const events = useMemo(() => all.filter((e) => !e.deleted), [all]);
   const getEvent = useCallback((id: string) => events.find((e) => e.id === id), [events]);
 
   const value: Store = {
     ready,
+    user,
     events,
     pendingCount,
     settings,
@@ -301,6 +358,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateSettings,
     syncNow,
     install,
+    logout,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

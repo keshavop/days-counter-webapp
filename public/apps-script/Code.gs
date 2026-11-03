@@ -1,184 +1,94 @@
 /**
- * Days Counter — Google Apps Script backend.
+ * Days Counter — CSV storage in Google Drive.
  *
- * Stores events as rows in a tab called "events" in the spreadsheet this script is bound to.
- * Deploy: Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
- * Optional: Project settings → Script properties → API_KEY = <secret>, and enter the same key in the app.
+ * The app's server keeps two CSV files in one Drive folder: users.csv and events.csv.
+ * This script only reads and overwrites those files; the app does everything else.
  *
- * API
- *   GET  ?action=ping&key=…   → { ok, sheetName, sheetUrl }
- *   GET  ?action=list&key=…   → { ok, rows: [ {id, title, …}, … ] }
- *   GET  ?action=csv&key=…    → the sheet as CSV text
- *   POST { action: "upsert",  key, rows }  → insert/update rows by id (newer updated_at wins);
- *                                            rows with deleted="TRUE" are removed. Returns { ok, rows }.
- *   POST { action: "replace", key, rows }  → overwrite all rows. Returns { ok, rows }.
+ * Setup (script.google.com → New project, paste this file):
+ * 1. Set SECRET below to a long random string (e.g. `openssl rand -hex 24`).
+ *    The same value goes in the app's DRIVE_SCRIPT_SECRET.
+ * 2. Optional: Project settings → Script properties → FOLDER_ID = the id of a Drive folder.
+ *    Without it the script creates a folder called "Days Counter data" on first use.
+ * 3. Deploy → New deployment → Web app: Execute as **Me**, Who has access **Anyone**.
+ *    Authorise, then copy the /exec URL into DRIVE_SCRIPT_URL.
+ * After editing later: Deploy → Manage deployments → Edit → Version: New version.
+ *
+ * Every request must carry SECRET, so the URL alone gives no access.
+ *
+ * API (POST, JSON body)
+ *   { secret, action: "info" }                    → { ok, folder, url }
+ *   { secret, action: "read",  file }             → { ok, csv }   ("" if the file doesn't exist yet)
+ *   { secret, action: "write", file, csv }        → { ok }
  */
 
-var SHEET_NAME = 'events';
-var HEADERS = [
-  'id', 'title', 'date', 'description', 'reminder_at', 'notify_text', 'repeat', 'format',
-  'cover', 'image', 'dim', 'font', 'counter_size', 'title_size', 'color', 'divider',
-  'created_at', 'updated_at', 'deleted'
-];
-
-function doGet(e) {
-  return handle_(function () {
-    var p = (e && e.parameter) || {};
-    checkKey_(p.key);
-    var action = p.action || 'list';
-    if (action === 'ping') {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      getSheet_();
-      return { ok: true, sheetName: ss.getName(), sheetUrl: ss.getUrl() };
-    }
-    if (action === 'csv') {
-      return ContentService.createTextOutput(toCsv_()).setMimeType(ContentService.MimeType.CSV);
-    }
-    return { ok: true, rows: readRows_() };
-  });
-}
+const SECRET = "change-me-to-a-long-random-string";
+var FOLDER_NAME = "Days Counter data";
+var FILES = { "users.csv": true, "events.csv": true };
 
 function doPost(e) {
-  return handle_(function () {
-    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    checkKey_(body.key);
-    var lock = LockService.getScriptLock();
-    lock.waitLock(20000);
-    try {
-      var rows = Array.isArray(body.rows) ? body.rows : [];
-      if (body.action === 'upsert') upsert_(rows);
-      else if (body.action === 'replace') replace_(rows);
-      else throw new Error('Unknown action: ' + body.action);
-      SpreadsheetApp.flush();
-      return { ok: true, rows: readRows_() };
-    } finally {
-      lock.releaseLock();
-    }
-  });
-}
-
-/* ---------- helpers ---------- */
-
-function handle_(fn) {
-  var out;
+  var req;
   try {
-    out = fn();
+    req = JSON.parse(e.postData.contents);
   } catch (err) {
-    out = { ok: false, error: String((err && err.message) || err) };
+    return reply({ ok: false, error: "bad request: body must be JSON" });
   }
-  if (out && typeof out.getContent === 'function') return out; // already a TextOutput (csv)
-  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function checkKey_(key) {
-  var expected = PropertiesService.getScriptProperties().getProperty('API_KEY');
-  if (expected && key !== expected) throw new Error('Wrong access key');
-}
-
-function getSheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) sh = ss.insertSheet(SHEET_NAME);
-  if (sh.getLastRow() === 0) {
-    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
-    sh.setFrozenRows(1);
+  if (!SECRET || SECRET === "change-me-to-a-long-random-string") {
+    return reply({ ok: false, error: "set SECRET in the Apps Script first" });
   }
-  // Keep everything as plain text so dates like 2026-12-19 aren't turned into Date cells.
-  sh.getRange(1, 1, sh.getMaxRows(), HEADERS.length).setNumberFormat('@');
-  return sh;
-}
+  if (req.secret !== SECRET) return reply({ ok: false, error: "unauthorized" });
 
-/** Column index (0-based) of every known header, read from the sheet so columns can be reordered. */
-function headerMap_(sh) {
-  var lastCol = Math.max(sh.getLastColumn(), 1);
-  var head = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
-  var map = {};
-  head.forEach(function (h, i) { map[String(h).trim()] = i; });
-  // Add any missing headers to the right.
-  HEADERS.forEach(function (h) {
-    if (map[h] === undefined) {
-      var col = sh.getLastColumn() + 1;
-      sh.getRange(1, col).setValue(h).setFontWeight('bold');
-      map[h] = col - 1;
+  // One request at a time, so a write never interleaves with another read or write.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return reply({ ok: false, error: "busy, try again" });
+  try {
+    var dir = folder();
+    switch (req.action) {
+      case "info":
+        return reply({ ok: true, folder: dir.getName(), url: dir.getUrl() });
+
+      case "read": {
+        var f = file(dir, req.file);
+        return reply({ ok: true, csv: f ? f.getBlob().getDataAsString("UTF-8") : "" });
+      }
+
+      case "write": {
+        if (typeof req.csv !== "string") return reply({ ok: false, error: "write needs csv text" });
+        var existing = file(dir, req.file);
+        if (existing) existing.setContent(req.csv);
+        else dir.createFile(req.file, req.csv, MimeType.CSV);
+        return reply({ ok: true });
+      }
+
+      default:
+        return reply({ ok: false, error: "unknown action " + req.action });
     }
-  });
-  return map;
-}
-
-function readRows_() {
-  var sh = getSheet_();
-  var map = headerMap_(sh);
-  var last = sh.getLastRow();
-  if (last < 2) return [];
-  var values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getDisplayValues();
-  var rows = [];
-  values.forEach(function (v) {
-    var row = {};
-    HEADERS.forEach(function (h) { row[h] = v[map[h]] || ''; });
-    if (row.id && row.date) rows.push(row);
-  });
-  return rows;
-}
-
-function toValues_(row, map, width) {
-  var out = new Array(width).fill('');
-  HEADERS.forEach(function (h) {
-    var v = row[h];
-    out[map[h]] = v === undefined || v === null ? '' : String(v);
-  });
-  return out;
-}
-
-function upsert_(rows) {
-  var sh = getSheet_();
-  var map = headerMap_(sh);
-  var width = sh.getLastColumn();
-  var last = sh.getLastRow();
-  var existing = last >= 2 ? sh.getRange(2, 1, last - 1, width).getDisplayValues() : [];
-  var index = {};
-  existing.forEach(function (v, i) { index[v[map.id]] = { rowNum: i + 2, updated: v[map.updated_at] }; });
-
-  var toDelete = [];
-  var toAppend = [];
-  rows.forEach(function (row) {
-    if (!row || !row.id) return;
-    var hit = index[row.id];
-    var isDeleted = /^(true|1|yes)$/i.test(String(row.deleted || ''));
-    if (isDeleted) {
-      if (hit && hit.rowNum > 0) toDelete.push(hit.rowNum);
-      return;
-    }
-    row.deleted = '';
-    if (hit && hit.rowNum > 0) {
-      // Last write wins: ignore a change older than what the sheet already has.
-      if (hit.updated && row.updated_at && String(row.updated_at) < String(hit.updated)) return;
-      sh.getRange(hit.rowNum, 1, 1, width).setValues([toValues_(row, map, width)]);
-    } else if (!hit) {
-      toAppend.push(toValues_(row, map, width));
-      index[row.id] = { rowNum: -1, updated: row.updated_at };
-    }
-  });
-
-  if (toAppend.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, toAppend.length, width).setNumberFormat('@').setValues(toAppend);
+  } catch (err) {
+    return reply({ ok: false, error: String((err && err.message) || err) });
+  } finally {
+    lock.releaseLock();
   }
-  toDelete.sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
 }
 
-function replace_(rows) {
-  var sh = getSheet_();
-  var last = sh.getLastRow();
-  if (last >= 2) sh.deleteRows(2, last - 1);
-  upsert_(rows);
+function doGet() {
+  return reply({ ok: true, service: "days-counter" });
 }
 
-function toCsv_() {
-  var rows = readRows_();
-  var esc = function (v) {
-    v = String(v);
-    return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  };
-  var lines = [HEADERS.join(',')];
-  rows.forEach(function (r) { lines.push(HEADERS.map(function (h) { return esc(r[h]); }).join(',')); });
-  return lines.join('\r\n');
+function folder() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty("FOLDER_ID");
+  if (id) return DriveApp.getFolderById(id);
+  var found = DriveApp.getFoldersByName(FOLDER_NAME);
+  var dir = found.hasNext() ? found.next() : DriveApp.createFolder(FOLDER_NAME);
+  props.setProperty("FOLDER_ID", dir.getId());
+  return dir;
+}
+
+function file(dir, name) {
+  if (!FILES[name]) throw new Error('unknown file "' + name + '"');
+  var found = dir.getFilesByName(name);
+  return found.hasNext() ? found.next() : null;
+}
+
+function reply(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }

@@ -108,19 +108,12 @@ function EventDetail() {
             <span className="text-[15px] font-medium">{ev.repeat === "once" ? "Only once" : `Repeats ${ev.repeat}`}</span>
           </li>
           <li className="flex items-center gap-3 py-3.5">
-            {pendingCount > 0 || status === "unconfigured" ? (
+            {pendingCount > 0 || status === "offline" ? (
               <IconRefresh className="shrink-0 text-warn" />
             ) : (
               <IconCloudCheck className="shrink-0 text-ok" />
             )}
-            <span className="flex-1 text-[15px] font-medium">
-              {status === "unconfigured" ? "Saved on this device" : pendingCount > 0 ? "Waiting to sync" : "Saved to Google Sheet"}
-            </span>
-            {status === "unconfigured" && (
-              <Link href="/sync" className="text-sm font-semibold text-accent-text hover:underline">
-                Connect
-              </Link>
-            )}
+            <span className="flex-1 text-[15px] font-medium">{pendingCount > 0 || status === "offline" ? "Waiting to sync" : "Saved to Google Drive"}</span>
           </li>
         </ul>
 
@@ -129,7 +122,7 @@ function EventDetail() {
             <p id="del-title" className="font-semibold">
               Delete “{ev.title}”?
             </p>
-            <p className="mt-1 text-sm text-muted">It will also be removed from your Google Sheet.</p>
+            <p className="mt-1 text-sm text-muted">It will also be removed from events.csv in Google Drive.</p>
             <div className="mt-4 flex gap-3">
               <button type="button" className={`${buttonClass.secondary} flex-1`} onClick={() => setConfirming(false)}>
                 Keep it

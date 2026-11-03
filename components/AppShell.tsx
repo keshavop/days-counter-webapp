@@ -5,6 +5,35 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconCalc, IconCalendar, IconCloud, IconPlus } from "./Icons";
 import { SyncPill } from "./SyncPill";
+import { useStore } from "@/lib/store";
+
+export function LogoutIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />
+    </svg>
+  );
+}
+
+/** Avatar, name and email with a Log out button. */
+function Account() {
+  const { user, logout } = useStore();
+  if (!user) return null;
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-line bg-bg p-2">
+      <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft font-semibold text-accent-soft-ink">
+        {(user.name || user.email).charAt(0).toUpperCase()}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-medium">{user.name}</span>
+        <span className="truncate text-xs text-muted">{user.email}</span>
+      </div>
+      <button type="button" aria-label="Log out" onClick={() => void logout()} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-seg hover:text-ink">
+        <LogoutIcon />
+      </button>
+    </div>
+  );
+}
 
 const NAV = [
   { href: "/", label: "Events", Icon: IconCalendar },
@@ -20,17 +49,18 @@ function isActive(path: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname() || "/";
   const focused = path.startsWith("/new") || path.startsWith("/edit");
+  if (path === "/login" || path === "/signup") return <>{children}</>;
 
   return (
     <div className="min-h-dvh md:flex">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 border-r border-line bg-card p-5 md:flex">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-white">D</span>
-          <span className="font-display text-xl font-bold tracking-tight">Days Counter</span>
+          <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-base font-bold text-on-accent">D</span>
+          <span className="text-lg font-semibold tracking-tight">Days Counter</span>
         </Link>
         <Link
           href="/new"
-          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-white hover:bg-accent-hover"
+          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-on-accent hover:bg-accent-hover"
         >
           <IconPlus size={18} strokeWidth={2.4} /> New event
         </Link>
@@ -51,8 +81,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="mt-auto">
-          <SyncPill />
+        <div className="mt-auto flex flex-col gap-3">
+          <SyncPill className="self-start" />
+          <Account />
         </div>
       </aside>
 

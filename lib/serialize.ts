@@ -62,7 +62,7 @@ function num(v: unknown, fallback: number, min: number, max: number): number {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
 }
 
-/** Turn a loosely-typed row (sheet, CSV) into a valid event, or null if it has no usable date. */
+/** Turn a loosely-typed row (CSV, API) into a valid event, or null if it has no usable date. */
 export function fromRow(raw: Partial<Record<string, unknown>>): DayEvent | null {
   const s = (k: string) => (raw[k] == null ? "" : String(raw[k]).trim());
   const date = s("date");
@@ -104,14 +104,18 @@ function escapeCell(v: string): string {
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
-export function toCSV(events: DayEvent[]): string {
-  const cols = COLUMNS.filter((c) => c !== "deleted");
-  const lines = [cols.join(",")];
-  for (const e of events) {
-    const row = toRow(e);
-    lines.push(cols.map((c) => escapeCell(row[c])).join(","));
-  }
+/** Any table as CSV: a header row, then one line per record (missing values are empty). */
+export function toCsv(columns: readonly string[], records: Record<string, string>[]): string {
+  const lines = [columns.join(",")];
+  for (const r of records) lines.push(columns.map((c) => escapeCell(r[c] ?? "")).join(","));
   return lines.join("\r\n") + "\r\n";
+}
+
+export function toCSV(events: DayEvent[]): string {
+  return toCsv(
+    COLUMNS.filter((c) => c !== "deleted"),
+    events.map(toRow),
+  );
 }
 
 export function parseCSV(text: string): string[][] {
@@ -146,6 +150,14 @@ export function parseCSV(text: string): string[][] {
     rows.push(row);
   }
   return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+/** Parse CSV with a header row into records keyed by the (trimmed) header names. */
+export function csvRecords(text: string): Record<string, string>[] {
+  const [header, ...body] = parseCSV(text);
+  if (!header) return [];
+  const keys = header.map((h) => h.trim());
+  return body.map((cells) => Object.fromEntries(keys.map((k, i) => [k, cells[i] ?? ""])));
 }
 
 /** Parse a CSV file into events. Unknown columns are ignored; rows without a valid date are skipped. */

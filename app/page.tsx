@@ -120,7 +120,7 @@ export default function EventsPage() {
 
       <Link
         href="/new"
-        className="fixed bottom-24 right-5 z-20 flex h-14 items-center gap-2 rounded-full bg-accent pl-4 pr-5 font-semibold text-white shadow-[0_8px_24px_rgba(194,65,12,0.35)] hover:bg-accent-hover md:hidden"
+        className="fixed bottom-24 right-5 z-20 flex h-14 items-center gap-2 rounded-full bg-accent pl-4 pr-5 font-semibold text-on-accent shadow-[0_8px_24px_rgba(57,211,83,0.3)] hover:bg-accent-hover md:hidden"
       >
         <IconPlus size={20} strokeWidth={2.4} /> New event
       </Link>
@@ -220,7 +220,7 @@ function EmptyState({ tab }: { tab: "up" | "past" }) {
           ? "Add a trip, a birthday or a deadline and watch the days tick down."
           : "Pick a past date, like the day you started a habit, and see how far you've come."}
       </p>
-      <Link href="/new" className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-5 font-semibold text-white hover:bg-accent-hover">
+      <Link href="/new" className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-5 font-semibold text-on-accent hover:bg-accent-hover">
         <IconPlus size={18} strokeWidth={2.4} /> New event
       </Link>
     </div>
