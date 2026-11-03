@@ -28,7 +28,7 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={on}
             onClick={() => onChange(o.value)}
-            className={`h-10 flex-1 rounded-xl px-3 text-sm font-semibold transition ${
+            className={`h-10 min-w-0 flex-1 truncate rounded-xl px-2 text-sm font-semibold transition sm:px-3 ${
               on ? "bg-seg-on text-ink shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
@@ -67,9 +67,19 @@ export function UnitChips({ value, onChange }: { value: Unit[]; onChange: (v: Un
   );
 }
 
-export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+export function Section({
+  title,
+  children,
+  action,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="rounded-3xl border border-line bg-card p-5">
+    <section className={`rounded-3xl border border-line bg-card p-4 sm:p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">{title}</h2>
         {action}
@@ -92,7 +102,7 @@ export function Field({ label, htmlFor, children, hint }: { label: string; htmlF
 }
 
 export const inputClass =
-  "h-12 w-full rounded-xl border border-line bg-bg px-3.5 text-[15px] text-ink placeholder:text-muted/80 outline-none focus:border-accent focus:ring-2 focus:ring-accent/25";
+  "h-12 w-full min-w-0 rounded-xl border border-line bg-bg px-3.5 text-[15px] text-ink placeholder:text-muted/80 outline-none focus:border-accent focus:ring-2 focus:ring-accent/25";
 
 export const buttonClass = {
   primary: "inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-accent px-5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60",
