@@ -11,7 +11,7 @@ import { CounterCard } from "./CounterCard";
 import { Field, Section, Segmented, UnitChips, buttonClass, inputClass } from "./Controls";
 import { IconBack, IconCheck, IconImage } from "./Icons";
 
-/** Sheets cells hold at most 50,000 characters; keep uploaded images safely under that. */
+/** Images are stored inline in events.csv; keep each one under 50,000 characters. */
 const MAX_IMAGE_CHARS = 45_000;
 
 async function compressImage(file: File): Promise<string> {
@@ -37,7 +37,7 @@ async function compressImage(file: File): Promise<string> {
       const data = canvas.toDataURL("image/jpeg", quality);
       if (data.length <= MAX_IMAGE_CHARS) return data;
     }
-    throw new Error("That image is too detailed to store in the sheet. Try a smaller one or paste an image link.");
+    throw new Error("That image is too detailed to store. Try a smaller one or paste an image link.");
   } finally {
     URL.revokeObjectURL(url);
   }

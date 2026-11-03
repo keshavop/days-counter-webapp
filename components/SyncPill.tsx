@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import { relativeTime } from "@/lib/dates";
 import { IconAlert, IconCloud, IconCloudCheck, IconCloudOff, IconRefresh } from "./Icons";
 
-/** Small status chip: synced / syncing / offline / error / not connected. Links to the Sync page. */
+/** Small status chip: synced / syncing / offline / error / signed out. Links to the Sync page. */
 export function SyncPill({ className = "" }: { className?: string }) {
   const { status, lastSync, pendingCount, ready } = useStore();
   if (!ready) return null;
@@ -21,9 +21,9 @@ export function SyncPill({ className = "" }: { className?: string }) {
   } else if (status === "error") {
     icon = <IconAlert size={16} className="text-danger" />;
     text = "Sync failed";
-  } else if (status === "unconfigured") {
+  } else if (status === "signedout") {
     icon = <IconCloud size={16} className="text-muted" />;
-    text = "Connect sheet";
+    text = "Signed out";
   } else if (pendingCount) {
     icon = <IconRefresh size={16} className="text-accent-text" />;
     text = `${pendingCount} to sync`;

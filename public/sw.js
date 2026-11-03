@@ -1,11 +1,11 @@
 /* Days Counter service worker — offline app shell + asset caching.
- * Data never goes through here: requests to script.google.com are cross-origin and left alone,
- * and events live in localStorage, so the app works fully offline and syncs when back online. */
+ * Data never goes through here: /api/* (accounts and events.csv in Google Drive) always goes
+ * to the network, and events live in localStorage, so the app works offline and syncs when back online. */
 
-const VERSION = "dc-v1";
+const VERSION = "dc-v2";
 const PAGES = `${VERSION}-pages`;
 const ASSETS = `${VERSION}-assets`;
-const SHELL = ["/", "/new", "/event", "/edit", "/calculator", "/sync", "/manifest.webmanifest", "/icons/icon-192.png"];
+const SHELL = ["/login", "/signup", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -30,6 +30,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // Sessions and data are never cached.
+  if (url.pathname.startsWith("/api/")) return;
 
   // Pages: network first so updates show up, cached copy when offline.
   // Pages read their event id from ?id=, so cache by path only.
@@ -38,7 +40,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) {
+          // A redirect (e.g. to /login when signed out) must not be cached under this page's path.
+          if (res.ok && !res.redirected) {
             const copy = res.clone();
             caches.open(PAGES).then((c) => c.put(key, copy));
           }

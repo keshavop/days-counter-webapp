@@ -2,7 +2,7 @@ export type Repeat = "once" | "weekly" | "monthly" | "yearly";
 export type Unit = "years" | "months" | "weeks" | "days";
 export type FontKey = "display" | "sans" | "serif" | "mono";
 
-/** One event. Every field maps 1:1 to a column in the Google Sheet / CSV. */
+/** One event. Every field maps 1:1 to a column in events.csv. */
 export interface DayEvent {
   id: string;
   title: string;
@@ -29,7 +29,7 @@ export interface DayEvent {
   divider: boolean;
   created_at: string;
   updated_at: string;
-  /** Tombstone: set locally on delete until the sheet has been told. */
+  /** Tombstone: set locally on delete until the server has been told. */
   deleted?: boolean;
 }
 
@@ -84,7 +84,7 @@ export const TEXT_COLORS: { name: string; hex: string }[] = [
 
 export const FONTS: { value: FontKey; label: string; className: string }[] = [
   { value: "display", label: "Bricolage", className: "font-display" },
-  { value: "sans", label: "Inter", className: "font-sans" },
+  { value: "sans", label: "Geist", className: "font-sans" },
   { value: "serif", label: "Fraunces", className: "font-serif" },
   { value: "mono", label: "JetBrains Mono", className: "font-mono" },
 ];
@@ -94,11 +94,14 @@ export function fontClass(font: FontKey): string {
 }
 
 export interface Settings {
-  scriptUrl: string;
-  apiKey: string;
-  sheetUrl: string;
   autoSync: boolean;
   theme: "system" | "light" | "dark";
 }
 
-export type SyncStatus = "unconfigured" | "idle" | "syncing" | "offline" | "error";
+export type SyncStatus = "signedout" | "idle" | "syncing" | "offline" | "error";
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
