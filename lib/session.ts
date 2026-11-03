@@ -2,7 +2,10 @@
 // Web Crypto only, so proxy.ts and the route handlers share it.
 
 export const SESSION_COOKIE = "dc_session";
-export const SESSION_DAYS = 30;
+/** Long-lived: a device stays signed in until its owner presses Log out. */
+export const SESSION_DAYS = 365;
+/** Re-issue the cookie once less than this many days are left, so an active device never expires. */
+const RENEW_BELOW_DAYS = 335;
 
 function secret(): string {
   const s = process.env.AUTH_SECRET;
@@ -40,4 +43,10 @@ export async function readSession(token: string | undefined): Promise<string | n
   let diff = 0;
   for (let i = 0; i < sig.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
   return diff === 0 ? userId : null;
+}
+
+/** True for a (valid) token that is old enough to be re-issued. */
+export function sessionNeedsRenewal(token: string | undefined): boolean {
+  const exp = Number(token?.split(".")[1]);
+  return Number.isFinite(exp) && exp - Date.now() < RENEW_BELOW_DAYS * 86_400_000;
 }

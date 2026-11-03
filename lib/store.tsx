@@ -132,6 +132,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         else setUser(u);
       })
       .catch((err) => {
+        // Only a real "not signed in" answer signs this device out. Offline, timeouts and
+        // server errors keep the remembered account, so people stay signed in.
         if (err instanceof AuthError) {
           remove(USER_KEY);
           setUser(null);

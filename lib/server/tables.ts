@@ -119,6 +119,12 @@ class DriveStore implements TableStore {
 let store: TableStore | null = null;
 export function tables(): TableStore {
   const url = process.env.DRIVE_SCRIPT_URL?.trim();
+  // On Vercel (or any production build) local files vanish between requests, so users.csv
+  // would read back empty and every session would look invalid, signing everyone out.
+  // Fail loudly instead; the client keeps its cached account on a 5xx.
+  if (!url && (process.env.VERCEL || process.env.NODE_ENV === "production") && !process.env.DATA_DIR) {
+    throw new StorageError("Storage is not configured: set DRIVE_SCRIPT_URL and DRIVE_SCRIPT_SECRET (see README).");
+  }
   store ??= url ? new DriveStore(url, process.env.DRIVE_SCRIPT_SECRET ?? "") : new LocalStore();
   return store;
 }
