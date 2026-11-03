@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, createSession, readSession } from "../session";
+import { SESSION_COOKIE, createSession, readSession, sessionNeedsRenewal } from "../session";
 import type { User } from "../types";
 import { tables, withLock, type Row } from "./tables";
 
@@ -55,6 +55,12 @@ export async function currentUser(): Promise<User | null> {
   if (!id) return null;
   const row = (await tables().read("users")).find((u) => u.id === id);
   return row ? toUser(row) : null;
+}
+
+/** Re-issues the session cookie on `res` when the current one is due for renewal. */
+export async function renewSession(res: NextResponse, userId: string): Promise<NextResponse> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return sessionNeedsRenewal(token) ? withSession(res, userId) : res;
 }
 
 export async function withSession(res: NextResponse, userId: string): Promise<NextResponse> {

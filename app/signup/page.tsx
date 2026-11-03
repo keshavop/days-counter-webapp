@@ -3,20 +3,10 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { signup } from "@/lib/api";
-import { AuthError, AuthScreen, PasswordInput, nextPath } from "@/components/AuthScreen";
+import { AuthError, AuthScreen, PasswordInput, nextPath, rememberLogin } from "@/components/AuthScreen";
 import { Field, buttonClass, inputClass } from "@/components/Controls";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function Check() {
-  return (
-    <span aria-hidden="true" className="flex size-5 items-center justify-center rounded bg-accent-soft text-accent-soft-ink">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 12l5 5L20 7" />
-      </svg>
-    </span>
-  );
-}
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -43,6 +33,7 @@ export default function SignupPage() {
     setError("");
     try {
       await signup(name.trim(), email.trim(), password);
+      await rememberLogin(email.trim(), password, name.trim());
       location.replace(nextPath());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't create the account. Try again.");
@@ -54,40 +45,28 @@ export default function SignupPage() {
 
   return (
     <AuthScreen
-      panel={
+      headline={
         <>
-          <h2 className="max-w-md text-[42px] font-bold leading-[1.1] tracking-tight">
-            Every day that matters, <span className="text-accent-text">in one place.</span>
-          </h2>
-          <ul className="flex flex-col gap-3 text-base">
-            <li className="flex items-center gap-2.5">
-              <Check /> Countdowns and count-ups with live progress
-            </li>
-            <li className="flex items-center gap-2.5">
-              <Check /> Your data saved as CSV in Google Drive
-            </li>
-            <li className="flex items-center gap-2.5">
-              <Check /> Works offline, syncs when you’re back
-            </li>
-          </ul>
+          Every day that matters, <span className="text-accent-text">in one place.</span>
         </>
       }
-      footer="Already counting? Log in on any device to pick up where you left off."
+      footer="Saved to a CSV file in your Google Drive. Log in on any device to pick up where you left off."
     >
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form method="post" action="/signup" onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[28px] font-semibold tracking-tight">Create your account</h1>
           <p className="text-[15px] text-muted">It takes a few seconds.</p>
         </div>
         {error && <AuthError>{error}</AuthError>}
         <Field label="Name" htmlFor="name" hint={show("name") && <span className="text-danger">{show("name")}</span>}>
-          <input id="name" type="text" autoComplete="name" required className={`${inputClass} ${show("name") ? "border-danger" : ""}`} value={name} onChange={(e) => setName(e.target.value)} />
+          <input id="name" name="name" type="text" autoComplete="name" required className={`${inputClass} ${show("name") ? "border-danger" : ""}`} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Email" htmlFor="email" hint={show("email") && <span id="email-err" className="text-danger">{show("email")}</span>}>
           <input
             id="email"
+            name="email"
             type="email"
-            autoComplete="email"
+            autoComplete="username"
             required
             aria-invalid={Boolean(show("email")) || undefined}
             aria-describedby={show("email") ? "email-err" : undefined}
@@ -115,6 +94,7 @@ export default function SignupPage() {
         <Field label="Confirm password" htmlFor="confirm" hint={show("confirm") && <span id="confirm-err" className="text-danger">{show("confirm")}</span>}>
           <input
             id="confirm"
+            name="confirm-password"
             type="password"
             autoComplete="new-password"
             required

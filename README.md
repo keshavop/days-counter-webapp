@@ -8,7 +8,7 @@ Countdowns to the days that matter and count-ups from the ones that changed you.
 - **Event editor with live preview.** Set the title, date, notes, and repeat (once, weekly, monthly, yearly). Choose the counter format (years, months, weeks, days). Style the card with a cover colour or photo, picture dim, font, counter and title sizes, text colour, and a divider line.
 - **Event detail.** Shows the full breakdown (y/m/d, w/d, hours), notes, reminder, sync state, sharing, and delete.
 - **Date calculator.** Works out the gap between two dates in any units, with a weekday count, an optional "include end date", and saving the result as an event.
-- **Accounts.** Sign up with name, email and password; log in on any device. Passwords are hashed with scrypt; the session is a signed, httpOnly cookie that lasts 30 days. Every page except `/login` and `/signup` needs a session, and each account only sees its own events.
+- **Accounts.** Sign up with name, email and password; log in on any device. Passwords are hashed with scrypt; the session is a signed, httpOnly cookie that lasts a year and renews itself whenever the app is opened, so a device stays signed in until you press **Log out** (which only signs out that device). The login and signup forms are set up so browsers and password managers offer to save the email and password. Every page except `/login` and `/signup` needs a session, and each account only sees its own events.
 - **CSV in Google Drive.** Works offline first, so every change is saved on the device immediately. Changes are pushed about a second later, and the app pulls on start, when you come back online, and every 5 minutes. Conflicts are resolved by newest `updated_at`.
 - **CSV backup.** Export everything, or import in merge or replace mode. CSV columns match `events.csv`.
 - **PWA.** Installable, works offline (a service worker caches the app shell), and has app shortcuts and maskable icons.
@@ -53,6 +53,8 @@ With no Drive script configured, the same two files are written to `data/` (giti
 6. Restart the app. After editing the script later: **Deploy → Manage deployments → Edit → Version: New version**, so the same URL serves the new code.
 
 The app needs a Node server (`npm run build && npm start`, or any host that runs Next.js route handlers); the local `data/` fallback also needs a writable disk.
+
+**On Vercel** set `AUTH_SECRET`, `DRIVE_SCRIPT_URL` and `DRIVE_SCRIPT_SECRET` in the project's environment variables. Vercel's disk doesn't keep files, so without Drive the API refuses to run (a clear 500) rather than losing accounts and signing everyone out. Keep `AUTH_SECRET` the same across deploys: changing it signs out every device.
 
 ### API
 
