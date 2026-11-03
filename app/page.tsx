@@ -112,7 +112,7 @@ export default function EventsPage() {
       ) : (
         <div className="mt-6 flex flex-col gap-4 md:gap-6">
           {hero && <Hero item={hero} kicker={tab === "up" ? "Next up" : "Longest running"} />}
-          <ul className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
             {rest.map((i) => i && <Row key={i.e.id} item={i} />)}
           </ul>
         </div>
